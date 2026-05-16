@@ -1,0 +1,23 @@
+# Local Model Router — routing configuration.
+# Edit this file to add tools, change routing rules, or point at a different
+# llama-server. Changes are picked up without restarting the router (Step 3).
+
+backends:
+  local:
+    base_url: "http://localhost:8080"
+    timeout_seconds: 120
+
+tools:
+  summarize:
+    description: "Summarize the given text."
+    task_type: summarization
+    system_prompt: |
+      You are a precise summarizer. Summarize the following text.
+      Target length: {max_length} (short = 1-2 sentences, medium = 1 paragraph, long = 2-3 paragraphs).
+      Do not add commentary; produce only the summary.
+    user_prompt: "{text}"
+    routing:
+      backend: local
+      reason: "Summarization is extractive; local model handles well within size limits"
+      max_tokens: 512
+      temperature: 0.0
