@@ -37,13 +37,22 @@ async def run_tool(
     request_id = uuid4().hex
     start = time.perf_counter()
 
+    # Apply YAML-defined defaults for parameters the caller omitted. Keeps
+    # the YAML as the single source of truth regardless of whether the call
+    # came through FastMCP (which would also have applied defaults) or a
+    # direct Python caller.
+    filled_args = dict(args)
+    for pname, pdef in tool_def.parameters.items():
+        if pname not in filled_args and not pdef.required:
+            filled_args[pname] = pdef.default
+
     try:
         system = (
-            tool_def.system_prompt.format(**args)
+            tool_def.system_prompt.format(**filled_args)
             if tool_def.system_prompt
             else None
         )
-        user = tool_def.user_prompt.format(**args)
+        user = tool_def.user_prompt.format(**filled_args)
     except KeyError as e:
         elapsed = (time.perf_counter() - start) * 1000.0
         err = ToolRunnerError(
