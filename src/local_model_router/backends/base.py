@@ -13,6 +13,12 @@ class GenerateResult:
     finish_reason: str | None
     latency_ms: float
     backend_name: str
+    # Populated by the router after dispatch. Kept on GenerateResult so the
+    # logger has one struct to read from.
+    routing_rule: str = ""
+    routing_reason: str = ""
+    routing_stage: str = "pre_dispatch"
+    input_tokens_estimate: int = 0
 
 
 @dataclass

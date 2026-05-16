@@ -1,6 +1,9 @@
 # Local Model Router — routing configuration.
 # Edit this file to add tools, change routing rules, or point at a different
 # llama-server. Changes are picked up without restarting the router.
+#
+# Every routing rule has a `reason` field. Reasons are written to the log
+# with every dispatch decision so the empirical record is auditable.
 
 defaults:
   backend: decline
@@ -10,6 +13,17 @@ backends:
   local:
     base_url: "http://localhost:8080"
     timeout_seconds: 120
+
+# Hard overrides evaluated in order, first match wins. Each match block can
+# specify `tool` (glob) and/or `decline_above_tokens` (matches when input
+# exceeds the threshold). Use these for global rules like "no local inference
+# above N tokens regardless of tool".
+overrides:
+  - match:
+      tool: "*"
+      decline_above_tokens: 6000
+    decline: true
+    reason: "Inputs above 6k tokens reliably degrade across local models; route to Claude Code"
 
 tools:
   summarize:
@@ -32,5 +46,7 @@ tools:
     routing:
       backend: local
       reason: "Summarization is extractive; local model handles well within size limits"
+      decline_above_tokens: 4000
+      decline_reason: "Summarization quality drops on local model above 4k input tokens"
       max_tokens: 512
       temperature: 0.0
