@@ -27,7 +27,7 @@ overrides:
 
 tools:
   summarize:
-    description: "Summarize the given text."
+    description: "Summarize the given text into a shorter form."
     task_type: summarization
     parameters:
       text:
@@ -49,4 +49,58 @@ tools:
       decline_above_tokens: 4000
       decline_reason: "Summarization quality drops on local model above 4k input tokens"
       max_tokens: 512
+      temperature: 0.0
+
+  extract:
+    description: "Extract structured data from text according to a schema description. Returns JSON."
+    task_type: extraction
+    parameters:
+      text:
+        type: string
+        description: "The source text to extract from"
+        required: true
+      schema:
+        type: string
+        description: "Description of what to extract (e.g., 'names, dates, dollar amounts')"
+        required: true
+    system_prompt: |
+      You extract structured information from text. Return ONLY a JSON object
+      containing the requested fields. No prose, no commentary, no markdown
+      fences. If a field is not present in the text, use null.
+
+      Fields to extract: {schema}
+    user_prompt: "{text}"
+    routing:
+      backend: local
+      reason: "Constrained-output extraction is a local-model strength"
+      decline_above_tokens: 3000
+      decline_reason: "Extraction reliability drops above 3k tokens; let Claude Code handle long documents"
+      max_tokens: 1024
+      temperature: 0.0
+
+  classify:
+    description: "Classify text into one of a fixed set of categories."
+    task_type: classification
+    parameters:
+      text:
+        type: string
+        description: "The text to classify"
+        required: true
+      categories:
+        type: string
+        description: "Comma-separated list of valid categories"
+        required: true
+    system_prompt: |
+      Choose exactly one category from the list that best fits the text.
+      Reply with ONLY the chosen category — no explanation, no punctuation,
+      no quotes.
+
+      Categories: {categories}
+    user_prompt: "{text}"
+    routing:
+      backend: local
+      reason: "Classification has a constrained output space; small models are very reliable here"
+      decline_above_tokens: 2000
+      decline_reason: "Long inputs degrade classification accuracy; route long classifications to Claude Code"
+      max_tokens: 32
       temperature: 0.0
