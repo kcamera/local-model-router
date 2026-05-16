@@ -1,0 +1,28 @@
+[project]
+name = "local-model-router"
+version = "0.1.0"
+description = "MCP server that routes generative tool calls to a local llama.cpp model or declines back to Claude Code"
+authors = [
+    { name = "Kevin Camera", email = "kcamera@alum.berkeley.edu" }
+]
+requires-python = ">=3.12"
+dependencies = [
+    "mcp[cli]>=1.20.0",
+    "pyyaml>=6.0",
+    "watchdog>=5.0",
+    "tiktoken>=0.8.0",
+]
+
+[project.scripts]
+local-model-router = "local_model_router.server:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    "respx>=0.22",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.6,<0.12.0"]
+build-backend = "uv_build"
