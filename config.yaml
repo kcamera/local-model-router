@@ -1,6 +1,10 @@
 # Local Model Router — routing configuration.
 # Edit this file to add tools, change routing rules, or point at a different
-# llama-server. Changes are picked up without restarting the router (Step 3).
+# llama-server. Changes are picked up without restarting the router.
+
+defaults:
+  backend: decline
+  reason: "Safe default: unknown tools are declined back to Claude Code"
 
 backends:
   local:
@@ -11,6 +15,15 @@ tools:
   summarize:
     description: "Summarize the given text."
     task_type: summarization
+    parameters:
+      text:
+        type: string
+        description: "The text to summarize"
+        required: true
+      max_length:
+        type: string
+        description: "Target length: short, medium, or long"
+        default: medium
     system_prompt: |
       You are a precise summarizer. Summarize the following text.
       Target length: {max_length} (short = 1-2 sentences, medium = 1 paragraph, long = 2-3 paragraphs).
