@@ -20,6 +20,7 @@ from .backends.base import Backend
 from .backends.local import LocalBackend
 from .config import RouterConfig, load_config
 from .config_watcher import ConfigWatcher
+from .logger import RouterLogger
 from .router import Router, ToolDeclined
 from .tool_factory import build_tool_function
 from .tool_runner import run_tool
@@ -27,7 +28,9 @@ from .tool_runner import run_tool
 
 logger = logging.getLogger(__name__)
 
-CONFIG_PATH = Path(__file__).resolve().parent.parent.parent / "config.yaml"
+PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+CONFIG_PATH = PROJECT_ROOT / "config.yaml"
+LOG_PATH = PROJECT_ROOT / "logs" / "router.jsonl"
 
 
 @dataclass
@@ -35,6 +38,7 @@ class AppState:
     config: RouterConfig
     backends: dict[str, Backend]
     router: Router
+    router_logger: RouterLogger
     registered_tools: set[str] = field(default_factory=set)
     # Captured from the first tool call so hot-reload can push
     # `notifications/tools/list_changed` to the connected client.
@@ -63,6 +67,7 @@ def _make_handler(state: AppState):
                 args=args,
                 config=state.config,
                 router=state.router,
+                logger=state.router_logger,
                 ctx=ctx,
             )
         except ToolDeclined as e:
@@ -96,7 +101,13 @@ async def app_lifespan(server: FastMCP) -> AsyncIterator[AppState]:
     for backend in backends.values():
         await backend.discover()
     router = Router(backends=backends, config=config)
-    state = AppState(config=config, backends=backends, router=router)
+    router_logger = RouterLogger(LOG_PATH)
+    state = AppState(
+        config=config,
+        backends=backends,
+        router=router,
+        router_logger=router_logger,
+    )
 
     handler = _make_handler(state)
     _register_tools(server, state, handler)
