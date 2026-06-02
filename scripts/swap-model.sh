@@ -59,7 +59,7 @@ LOG_FILE="$LOG_DIR/llama-server.log"
 echo "Starting llama-server with: $MODEL_PATH"
 echo "  Output: $LOG_FILE"
 
-nohup "$SCRIPT_DIR/start-llama-server.sh" "$MODEL_PATH" "${PASSTHROUGH[@]}" \
+nohup "$SCRIPT_DIR/start-llama-server.sh" "$MODEL_PATH" ${PASSTHROUGH[@]+"${PASSTHROUGH[@]}"} \
     >"$LOG_FILE" 2>&1 &
 
 NEW_PID=$!
