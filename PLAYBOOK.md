@@ -44,6 +44,36 @@ Leave this in a side terminal while you experiment.
 - Ask `classify` on a 2,500-token email → hits classify's threshold at 2k
 - Look at the rule names in the log (`override:#0`, `tool:summarize:threshold`, etc.)
 
+> **Note:** Claude Code's MCP transport applies its own content-filtering policy to large
+> payloads, so you can't always send threshold-crossing text through Claude Code directly.
+> If a tool call gets blocked before it reaches the router, test the decline logic
+> in-process instead:
+>
+> ```python
+> uv run python3 - <<'EOF'
+> import tiktoken
+> from pathlib import Path
+> from src.local_model_router.config import load_config
+> from src.local_model_router.router import Router
+> from src.local_model_router.backends.local import LocalBackend
+>
+> cfg = load_config(Path("config.yaml"))
+> backends = {n: LocalBackend(n, b.base_url, b.timeout_seconds) for n, b in cfg.backends.items()}
+> router = Router(backends=backends, config=cfg)
+> enc = tiktoken.get_encoding("cl100k_base")
+>
+> # Build a text just over each threshold and call _pre_dispatch directly
+> base = "A sentence that tokenizes predictably and contains no repetition red flags. "
+> for tool, threshold in [("classify", 2000), ("summarize", 4000), ("summarize", 6000)]:
+>     r = 1
+>     while len(enc.encode(base * r)) <= threshold:
+>         r += 1
+>     tok = len(enc.encode(base * r))
+>     d = router._pre_dispatch(tool, tok)
+>     print(f"{tool} @ {tok} tok → {d.action}, rule={d.rule}")
+> EOF
+> ```
+
 ### 5. Live-tune a threshold without restarting
 
 In one terminal:
@@ -53,6 +83,11 @@ tail -f logs/router.jsonl | jq -c '{tool: .tool_name, rule: .routing_rule, decis
 ```
 
 While Claude Code is running, edit `config.yaml` and drop `summarize.routing.decline_above_tokens` to 200. Send a 300-token summarize call. The log should show the next call declining without you touching the server.
+
+> **Note:** The watchdog fires on filesystem `modified` events. Most editors and tools
+> trigger this automatically on save, but some write methods (atomic renames,
+> in-place patch tools) may not update mtime reliably. If a threshold change doesn't
+> seem to take effect, run `touch config.yaml` to force the event and try again.
 
 ### 6. Add a tool from your couch
 
@@ -74,7 +109,7 @@ Paste this block into `config.yaml` and save:
       max_tokens: 1024
 ```
 
-In a fresh Claude Code conversation, ask it to "rewrite this in the style of a 19th-century telegram." It should see the new tool.
+In the same (or a fresh) Claude Code conversation, ask it to "rewrite this in the style of a 19th-century telegram." It should see the new tool within a few seconds — the server sends a `tools/list_changed` notification and Claude Code re-fetches the tool list automatically. You don't need to restart anything.
 
 ### 7. Force a "safe default"
 
@@ -107,6 +142,18 @@ Single-word outputs = healthy. Lengths over ~30 chars = the model is editorializ
 ### 10. Summarization — where it breaks
 
 This is where you'll find the real ceiling. Try the same source text at lengths 500 / 1500 / 3500 tokens. Compare `quality.output_length_ratio` and human-judge the quality. Hypothesis from CLAUDE.md: quality degrades around 1500 tokens.
+
+Observed `output_length_ratio` for Qwen2.5-14B-Q4_K_M on a single coherent topic (climate change):
+
+| Input tokens | Ratio | Notes |
+|---|---|---|
+| ~120 | 0.58 | Short input, summary is ≈ same length |
+| ~285 | 0.71 | Still near 1:1 — may be padding |
+| ~370 | 0.48 | Model starts compressing meaningfully |
+| ~595 | 0.32 | Good compression, still coherent |
+| ~934 | 0.12 | Aggressively truncated; covers all topics but very terse |
+
+The ratio drop at ~600–900 tokens is measurable and consistent. The summaries remain accurate, but nuance is lost. This is a good starting threshold for considering escalation to remote.
 
 ### 11. Swap models, re-run the same tests
 
@@ -142,7 +189,13 @@ Then hit summarize again. The router should still be responsive; the log should 
 
 ### 14. Send malformed args
 
-In Claude Code, intentionally invoke a tool wrong (e.g., extract without `schema`). MCP should reject at the schema layer before tool_runner ever sees it.
+In Claude Code, intentionally invoke a tool wrong (e.g., extract without `schema`). The call will be rejected with a Pydantic validation error before the routing logic runs, and nothing will appear in `router.jsonl`.
+
+> **Clarification on where validation happens:** FastMCP validates tool arguments
+> with Pydantic and returns an `isError: true` response — it does not reject at the
+> raw JSON-Schema transport layer. The practical result is the same (the router never
+> sees the call), but if you're writing code that checks for schema rejection, look
+> for `isError: true` in the MCP response rather than a transport-level error.
 
 ### 15. Tiny `max_tokens`
 

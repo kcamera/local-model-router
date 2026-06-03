@@ -104,3 +104,17 @@ tools:
       decline_reason: "Long inputs degrade classification accuracy; route long classifications to Claude Code"
       max_tokens: 32
       temperature: 0.0
+
+  rewrite:
+    description: "Rewrite text in a target style."
+    task_type: rewriting
+    parameters:
+      text: { type: string, required: true }
+      style: { type: string, required: true }
+    system_prompt: "Rewrite the text in the {style} style. Output only the rewrite."
+    user_prompt: "{text}"
+    routing:
+      backend: local
+      reason: "Style rewrites are generative but constrained"
+      decline_above_tokens: 2000
+      max_tokens: 1024

@@ -35,11 +35,14 @@ The quantization tag in a GGUF filename (e.g., `Q4_K_M`) controls the trade-off 
 
 llama-server reports the model filename as the `model` field in every response, and this router logs that string verbatim. **Keep the conventional `{model}-{params}-{quant}.gguf` naming** (which is what HuggingFace already does) so log analysis stays clean. Don't rename to anything cute.
 
-Example download:
+### Where to put models
+
+Store GGUFs in a `models/` directory inside the project root. The `swap-model.sh` script accepts a path relative to wherever you run it from, and `models/` is already in `.gitignore` so large files won't be accidentally committed.
+
 ```bash
-mkdir -p ~/models
+mkdir -p models
 # E.g., from huggingface_hub CLI, manual download, etc.
-# Filename will look like: qwen2.5-14b-instruct-Q4_K_M.gguf
+# Filename will look like: Qwen2.5-14B-Instruct-Q4_K_M.gguf
 ```
 
 ## Setup
@@ -55,7 +58,7 @@ uv sync
 ### Start llama-server with a model
 
 ```bash
-./scripts/swap-model.sh ~/models/qwen2.5-14b-instruct-Q4_K_M.gguf
+./scripts/swap-model.sh models/Qwen2.5-14B-Instruct-Q4_K_M.gguf
 ```
 
 This kills any existing llama-server on port 8080, starts a new one with the given GGUF, and waits for it to be ready. Run it again with a different GGUF to swap models — no config edits, no router restart.
@@ -72,7 +75,7 @@ That's it. Open Claude Code, and the router's tools (`summarize`, `extract`, `cl
 
 ## Tuning routing without restarts
 
-All routing rules live in `config.yaml`. Edit the file and changes take effect immediately — no router restart, no Claude Code restart. Add a new tool definition and Claude Code picks it up automatically via MCP's `tools/list_changed` notification.
+All routing rules live in `config.yaml`. Edit the file and changes take effect immediately — no router restart, no Claude Code restart. Add a new tool definition and Claude Code picks it up automatically via MCP's `tools/list_changed` notification. Allow a few seconds for the notification to propagate after saving.
 
 The empirical record lives in `logs/router.jsonl`. Every decision (handle / decline) is captured along with model identity, input/output sizes, latency, and output-quality signals.
 
