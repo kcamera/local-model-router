@@ -34,20 +34,21 @@ done
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Kill any process bound to the target port (typically a prior llama-server).
-EXISTING_PID=$(lsof -ti tcp:"$PORT" || true)
-if [[ -n "$EXISTING_PID" ]]; then
-    echo "Stopping existing process on port $PORT (PID $EXISTING_PID)..."
-    kill "$EXISTING_PID" 2>/dev/null || true
+# lsof may return multiple PIDs (server + connected clients); iterate over each.
+EXISTING_PIDS_RAW=$(lsof -ti tcp:"$PORT" 2>/dev/null || true)
+if [[ -n "$EXISTING_PIDS_RAW" ]]; then
+    echo "Stopping existing process(es) on port $PORT (PIDs: $(echo "$EXISTING_PIDS_RAW" | tr '\n' ' '))..."
+    echo "$EXISTING_PIDS_RAW" | xargs kill 2>/dev/null || true
     # Wait up to 5s for graceful shutdown, then SIGKILL.
     for _ in 1 2 3 4 5; do
         sleep 1
-        if ! kill -0 "$EXISTING_PID" 2>/dev/null; then
-            break
-        fi
+        STILL_RUNNING=$(lsof -ti tcp:"$PORT" 2>/dev/null || true)
+        [[ -z "$STILL_RUNNING" ]] && break
     done
-    if kill -0 "$EXISTING_PID" 2>/dev/null; then
-        echo "  Process did not exit gracefully; sending SIGKILL"
-        kill -9 "$EXISTING_PID" 2>/dev/null || true
+    STILL_RUNNING=$(lsof -ti tcp:"$PORT" 2>/dev/null || true)
+    if [[ -n "$STILL_RUNNING" ]]; then
+        echo "  Process(es) did not exit gracefully; sending SIGKILL to $(echo "$STILL_RUNNING" | tr '\n' ' ')"
+        echo "$STILL_RUNNING" | xargs kill -9 2>/dev/null || true
     fi
 fi
 

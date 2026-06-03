@@ -143,24 +143,29 @@ Single-word outputs = healthy. Lengths over ~30 chars = the model is editorializ
 
 This is where you'll find the real ceiling. Try the same source text at lengths 500 / 1500 / 3500 tokens. Compare `quality.output_length_ratio` and human-judge the quality. Hypothesis from CLAUDE.md: quality degrades around 1500 tokens.
 
-Observed `output_length_ratio` for Qwen2.5-14B-Q4_K_M on a single coherent topic (climate change):
+Observed `output_length_ratio` for Qwen2.5-14B-Q4_K_M and Llama-3.1-8B-Q4_K_M on a single coherent topic (climate change). **Note:** `output_length_ratio` is `output_chars / input_chars`, not tokens — don't mix units when interpreting it.
 
-| Input tokens | Ratio | Notes |
-|---|---|---|
-| ~120 | 0.58 | Short input, summary is ≈ same length |
-| ~285 | 0.71 | Still near 1:1 — may be padding |
-| ~370 | 0.48 | Model starts compressing meaningfully |
-| ~595 | 0.32 | Good compression, still coherent |
-| ~934 | 0.12 | Aggressively truncated; covers all topics but very terse |
+| Input tokens | Qwen 14B ratio | Llama 8B ratio | Notes |
+|---|---|---|---|
+| ~120 | 0.58 | 0.74 | Short input, both near paraphrase length |
+| ~370 | 0.48 | 0.63 | Compression starting |
+| ~595 | 0.32 | — | Solid compression, coherent |
+| ~934 | 0.12 | — | Qwen compresses hard; output ~170 tokens, still coherent |
+| ~1265 | 0.19 | — | Qwen at 10K ctx: 854 chars, complete coverage |
+| ~1265 | — | 0.54 | Llama at 16K ctx: 2,453 chars, verbose but thorough |
+| ~1874 | 0.26 | — | Qwen: 1,542 chars, covers all sections |
+| ~1874 | — | 0.41 | Llama: 2,352 chars |
 
-The ratio drop at ~600–900 tokens is measurable and consistent. The summaries remain accurate, but nuance is lost. This is a good starting threshold for considering escalation to remote.
+**Important correction:** the apparent "quality cliff" at ~934 tokens in earlier data was partly a measurement artifact — `output_length_ratio` uses chars on both sides but `input_tokens_estimate` is in tokens, making the denominators incommensurable. The actual output at 934 tokens was ~170 tokens (676 chars), well under the 512-token cap, and `finish_reason` was `stop` throughout. The model was choosing to compress, not truncating.
+
+At 1,265 and 1,874 tokens both models produced coherent, coverage-complete summaries at their proper ctx sizes. Qwen compresses more aggressively (fewer output tokens, more terse); Llama is more verbose but still under the cap.
 
 ### 11. Swap models, re-run the same tests
 
 This is the experiment the whole project exists for.
 
 ```bash
-./scripts/swap-model.sh ~/models/llama-3.1-8b-instruct-Q4_K_M.gguf
+./scripts/swap-model.sh models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf
 ```
 
 Re-run the extraction set from step 8. Compare in the log:
@@ -170,6 +175,32 @@ jq -s '[.[] | {model, tool: .tool_name, json_parses: .quality.json_parses, tps: 
 ```
 
 You should be able to see, per model, how many extractions parsed cleanly and how fast.
+
+#### Setting --ctx correctly
+
+The default ctx (8192) is conservative. Pass `--ctx` to use the model's full memory budget:
+
+```bash
+# Llama 3.1 8B on 16 GB M1 Pro — 16K fits with ~7 GB headroom
+./scripts/swap-model.sh models/Meta-Llama-3.1-8B-Instruct-Q4_K_M.gguf --ctx 16384
+
+# Qwen 2.5 14B on 16 GB M1 Pro — 10K is the computed safe ceiling
+# (model=8.5 GB, KV=44 KB/tok × 4 slots; 12K OOMs during large-batch prefill)
+./scripts/swap-model.sh models/Qwen2.5-14B-Instruct-Q4_K_M.gguf --ctx 10240
+```
+
+To derive the right ctx for a new model on your hardware:
+
+```bash
+# 1. Start at two small ctx values and measure process RSS
+./scripts/swap-model.sh <model> --ctx 512  && ps -p $(lsof -ti tcp:8080 | head -1) -o rss=
+./scripts/swap-model.sh <model> --ctx 4096 && ps -p $(lsof -ti tcp:8080 | head -1) -o rss=
+
+# 2. Derive per-token cost and max safe ctx (Python):
+#    per_token_kb = (rss_4096 - rss_512) / ((4096 - 512) * n_parallel)
+#    max_ctx = (metal_budget_mib * 1024 - model_fixed_kb) / (n_parallel * per_token_kb)
+#    Apply a ~300 MiB safety margin for peak compute spikes, round to nearest 1024.
+```
 
 ### 12. Quantization sweep
 

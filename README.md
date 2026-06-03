@@ -58,10 +58,12 @@ uv sync
 ### Start llama-server with a model
 
 ```bash
-./scripts/swap-model.sh models/Qwen2.5-14B-Instruct-Q4_K_M.gguf
+./scripts/swap-model.sh models/Qwen2.5-14B-Instruct-Q4_K_M.gguf --ctx 10240
 ```
 
 This kills any existing llama-server on port 8080, starts a new one with the given GGUF, and waits for it to be ready. Run it again with a different GGUF to swap models — no config edits, no router restart.
+
+The `--ctx` flag sets the context window. The default (8192) is safe for any model that fits in RAM, but you can push higher — see [PLAYBOOK.md step 11](PLAYBOOK.md#11-swap-models-re-run-the-same-tests) for the methodology and recommended values per model on 16 GB M1 Pro.
 
 ### Register the router with Claude Code
 
